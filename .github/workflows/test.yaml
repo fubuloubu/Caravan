@@ -34,3 +34,15 @@ jobs:
       - uses: ApeWorX/github-action@v3
       - run: pip install .
       - run: ape test -s --gas tests/functional
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: compilation
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ApeWorX/github-action@v3
+      - run: pip install .
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: ape test -s --gas tests/integration

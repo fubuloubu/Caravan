@@ -7,6 +7,7 @@ from packaging.version import Version
 
 from .main import Caravan
 from .packages import STABLE_VERSION, PackageType
+from .settings import FACTORY_DETERMINISTIC_ADDRESS, SINGLETON_DETERMINISTIC_ADDRESSES
 
 if TYPE_CHECKING:
     from ape.contracts import ContractInstance
@@ -18,8 +19,7 @@ class Factory(ManagerAccessMixin):
             self.address = address
 
         elif len((factory_type := PackageType.FACTORY()).deployments) == 0:
-            # NOTE: This is the deterministic deployment address via CreateX
-            self.address = "0x04579FFC45fE10A7901B88EaEc8F4850b847D37c"
+            self.address = FACTORY_DETERMINISTIC_ADDRESS
 
             if not len(self.provider.get_code(self.address)) > 0:
                 raise RuntimeError("No CaravanFactory deployment on this chain")
@@ -31,10 +31,8 @@ class Factory(ManagerAccessMixin):
 
         # NOTE: also lets us override for testing
         self._cached_releases: dict[Version, "ContractInstance"] = {
-            # NOTE: This is the deterministic deployment address for v1 via CreateX
-            Version("1"): PackageType.SINGLETON("1").at(
-                "0xB810c65972596d213DCdf0A73b27fa7be59Ef3E2"
-            ),
+            Version(version): PackageType.SINGLETON(version).at(address)
+            for version, address in SINGLETON_DETERMINISTIC_ADDRESSES.items()
         }
 
     @cached_property

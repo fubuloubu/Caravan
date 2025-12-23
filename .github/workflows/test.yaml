@@ -15,13 +15,22 @@ jobs:
       - uses: astral-sh/ruff-action@v3
       - run: ruff format --check --diff
 
-  test:
-    name: Functional Tests
+  compilation:
+    name: Compile Contracts
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v5
       - uses: ApeWorX/github-action@v3
       - run: ape compile --size
+
+  functional:
+    name: Functional Tests
+    runs-on: ubuntu-latest
+    needs: compilation
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ApeWorX/github-action@v3
       - run: pip install .
-      - run: ape test -s --gas
+      - run: ape test -s --gas tests/functional

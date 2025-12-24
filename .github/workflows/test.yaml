@@ -23,6 +23,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: ApeWorX/github-action@v3
       - run: ape compile --size
+      - uses: actions/upload-artifact@v6
+        with:
+          name: build
+          path: .build/__local__.json
 
   functional:
     name: Functional Tests
@@ -31,6 +35,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          name: build
       - uses: ApeWorX/github-action@v3
       - run: pip install .
       - run: ape test -s --gas tests/functional
@@ -42,6 +49,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          name: build
       - uses: ApeWorX/github-action@v3
       - run: pip install .
       - uses: foundry-rs/foundry-toolchain@v1

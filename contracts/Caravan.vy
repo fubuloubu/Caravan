@@ -159,7 +159,8 @@ def _verify_signatures(msghash: bytes32, signatures: DynArray[Bytes[65], 11]):
     already_approved: DynArray[address, 11] = []
 
     for signer: address in signers:
-        if self.approved[msghash][signer] <= block.timestamp:
+        approved_at: uint256 = self.approved[msghash][signer]
+        if 0 < approved_at and approved_at <= block.timestamp:
             already_approved.append(signer)  # NOTE: Track for use in next loop
             approvals_needed -= 1  # dev: underflow
             # NOTE: Get some gas back by deleting storage

@@ -5,6 +5,7 @@ import runpy
 
 from ape.exceptions import AccountsError, ConversionError
 import click
+from ape.api.address import Address
 from ape.cli import (
     ConnectedProviderCommand,
     account_option,
@@ -14,11 +15,15 @@ from ape.cli import (
 from ape.types import AddressType, HexBytes
 from packaging.version import Version
 
-from caravan.settings import USER_CONFIG_DIR
 
 from .cli import version_option, caravan_argument, parent_option
 from .factory import Factory
 from .packages import PackageType
+from .settings import (
+    USER_CONFIG_DIR,
+    FACTORY_DETERMINISTIC_ADDRESS,
+    SINGLETON_DETERMINISTIC_ADDRESSES,
+)
 
 if TYPE_CHECKING:
     from ape.api.accounts import AccountAPI
@@ -426,9 +431,9 @@ def run(cli_ctx, network, proposer, submit, stop_at, caravan):
 
     # NOTE: Only one option, so pop it
     hashlen = hashlen_sizes.pop()
-    assert stop_at is None or len(stop_at) == hashlen, (
-        f"Does not match hash length of {hashlen}: '{stop_at}'"
-    )
+    assert (
+        stop_at is None or len(stop_at) == hashlen
+    ), f"Does not match hash length of {hashlen}: '{stop_at}'"
 
     parent = caravan.head
     cli_ctx.logger.info(f"Current head: {parent.to_0x_hex()}")
@@ -496,6 +501,26 @@ def sudo():
     """Manage the system contracts [ADVANCED]"""
 
 
+@sudo.command(cls=ConnectedProviderCommand)
+def check():
+    """Check Proxy Factory and versions on the specified network"""
+
+    click.echo(
+        "Factory: "
+        + (
+            "deployed"
+            if Address(FACTORY_DETERMINISTIC_ADDRESS).is_contract
+            else "missing"
+        )
+    )
+
+    for version, address in SINGLETON_DETERMINISTIC_ADDRESSES.items():
+        click.echo(
+            f"Singleton v{version}: "
+            + ("deployed" if Address(address).is_contract else "missing")
+        )
+
+
 @sudo.group()
 def deploy():
     """
@@ -506,9 +531,14 @@ def deploy():
 
 
 @deploy.command(cls=ConnectedProviderCommand)
+@ape_cli_context()
 @account_option()
-def factory(network: "NetworkAPI", account: "AccountAPI"):
+def factory(cli_ctx, network: "NetworkAPI", account: "AccountAPI"):
     """Deploy Proxy Factory to the specified network"""
+
+    if Address(FACTORY_DETERMINISTIC_ADDRESS).is_contract:
+        cli_ctx.logger.info("Factory already deployed")
+        return
 
     try:
         factory = PackageType.FACTORY.deploy(sender=account)
@@ -538,10 +568,15 @@ def factory(network: "NetworkAPI", account: "AccountAPI"):
 
 
 @deploy.command(cls=ConnectedProviderCommand)
+@ape_cli_context()
 @version_option()
 @account_option()
-def singleton(network: "NetworkAPI", version: Version, account: "AccountAPI"):
+def singleton(cli_ctx, network: "NetworkAPI", version: Version, account: "AccountAPI"):
     """Deploy the given version of singleton contract"""
+
+    if Address(SINGLETON_DETERMINISTIC_ADDRESSES[str(version)]).is_contract:
+        cli_ctx.logger.info(f"Singleton {version} already deployed")
+        return
 
     try:
         singleton = PackageType.SINGLETON.deploy(version=version, sender=account)

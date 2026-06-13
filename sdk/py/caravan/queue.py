@@ -18,7 +18,7 @@ from .settings import USER_CACHE_DIR
 
 
 def signature_serialize(s: MessageSignature) -> str:
-    return s.as_rsv().hex()
+    return s.encode_rsv().hex()
 
 
 def hash_domain(domain_type: dict) -> HexBytes:

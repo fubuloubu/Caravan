@@ -14,6 +14,12 @@ dependencies = [
     "createx>=0.1.1",
 ]
 
+[project.optional-dependencies]
+sync = [
+    "libp2p>=0.4.0",
+    "multiaddr>=0.1.1",
+]
+
 [dependency-groups]
 test = [
     "ape-foundry>=0.8.10",

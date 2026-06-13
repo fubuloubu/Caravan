@@ -172,11 +172,14 @@ class Caravan(ManagerAccessMixin):
             signatures = {}
 
         # First, yield all existing signatures in-queue (if any)
-        for sig in signatures:
-            if (address := recover_signer(msg, sig)) not in skip:
-                yield address, sig
+        for signer, sig in signatures.items():
+            if recover_signer(msg.signable_message, sig) != signer:
+                raise RuntimeError(f"Corrupted signature: {sig}")
 
-            skip.add(address)
+            elif signer not in skip:
+                yield signer, sig
+
+            skip.add(signer)
 
         # Then, collect new signatures from local signers
         for signer in set(self.local_signers) - skip:

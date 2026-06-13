@@ -55,4 +55,4 @@ jobs:
       - uses: ApeWorX/github-action@v3
       - run: pip install .
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: ape test -s --gas tests/integration
+      - run: ape test -s tests/integration

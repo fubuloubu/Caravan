@@ -40,3 +40,37 @@ def runner(monkeypatch):
             )
             yield runner
             p.terminate()
+
+
+@pytest.fixture()
+def run_cmd(cli, runner):
+    def run_cmd(*args, prompt_args=None):
+        result = runner.invoke(cli, args, input=prompt_args)
+        if result.exception:
+            raise result.exception
+
+        elif result.exit_code != 0:
+            raise RuntimeError(f"Error:\n{result.output}")
+
+        return result
+
+    return run_cmd
+
+
+@pytest.fixture()
+def deploy_system(DEFAULT_ARGS, run_cmd):
+    def deploy_system():
+        run_cmd("sudo", "deploy", "factory", *DEFAULT_ARGS)
+        run_cmd("sudo", "deploy", "singleton", *DEFAULT_ARGS)
+
+    return deploy_system
+
+
+@pytest.fixture()
+def create_wallet(DEFAULT_ARGS, run_cmd, deploy_system):
+    def create_wallet():
+        deploy_system()
+
+        return run_cmd("new", "TEST::0", "TEST::1", "TEST::2", *DEFAULT_ARGS)
+
+    return create_wallet

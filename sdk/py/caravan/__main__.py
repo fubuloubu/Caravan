@@ -431,9 +431,9 @@ def run(cli_ctx, network, proposer, submit, stop_at, caravan):
 
     # NOTE: Only one option, so pop it
     hashlen = hashlen_sizes.pop()
-    assert (
-        stop_at is None or len(stop_at) == hashlen
-    ), f"Does not match hash length of {hashlen}: '{stop_at}'"
+    assert stop_at is None or len(stop_at) == hashlen, (
+        f"Does not match hash length of {hashlen}: '{stop_at}'"
+    )
 
     parent = caravan.head
     cli_ctx.logger.info(f"Current head: {parent.to_0x_hex()}")

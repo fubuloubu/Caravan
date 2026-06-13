@@ -9,6 +9,7 @@ from ape.cli import (
     ape_cli_context,
 )
 from ape.exceptions import ConversionError
+from ape.logging import logger
 from ape.types import AddressType, HexBytes
 from packaging.version import Version
 
@@ -39,10 +40,7 @@ def version_option():
                 ) from e
 
         if version == NEXT_VERSION:
-            click.echo(
-                click.style("WARNING:", fg="yellow")
-                + f"  Using un-released version {version}"
-            )
+            logger.warning(f"  Using un-released version {version}")
 
         return version
 

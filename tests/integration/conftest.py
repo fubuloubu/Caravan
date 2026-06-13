@@ -11,6 +11,25 @@ def _clear_ape_local_caches():
     chain.contracts.clear_local_caches()
 
 
+def _ensure_createx(provider):
+    from createx import package
+    from createx.main import CreateX
+
+    provider.set_balance(package.DEPLOYER, "1 ETH")
+    if provider.get_code(package.DEPLOYED_ADDRESS):
+        return
+
+    with provider.network.use_provider(
+        provider,
+        disconnect_after=False,
+        disconnect_on_exit=False,
+    ):
+        CreateX.inject()
+
+    if not provider.get_code(package.DEPLOYED_ADDRESS):
+        raise RuntimeError("CreateX was not deployed on the test provider")
+
+
 @pytest.fixture(scope="session")
 def config_manager():
     from ape.utils.basemodel import ManagerAccessMixin
@@ -28,6 +47,7 @@ def foundry_provider(config_manager, networks):
             provider_settings=provider_settings,
             disconnect_after=True,
         ) as provider:
+            _ensure_createx(provider)
             yield provider
 
 
@@ -75,6 +95,7 @@ def runner(monkeypatch, foundry_provider):
         )
 
         with runner.isolated_filesystem():
+            _ensure_createx(foundry_provider)
             _clear_ape_local_caches()
             try:
                 yield runner

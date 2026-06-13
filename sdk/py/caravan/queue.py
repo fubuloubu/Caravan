@@ -57,6 +57,29 @@ class QueueItem(BaseModel):
 
         return cls(message=message, signatures=signatures)
 
+    @classmethod
+    def decode(cls, encoded_item: str, eip712_domain: EIP712Domain) -> Self:
+        item = json.loads(encoded_item)
+        if "action" in item["message"]:
+            message = Modify(**item["message"], eip712_domain=eip712_domain)
+        elif "calls" in item["message"]:
+            message = Execute(**item["message"], eip712_domain=eip712_domain)
+        else:
+            raise ValueError
+
+        signatures = {
+            AddressType(signer): MessageSignature(r=raw[:32], s=raw[32:64], v=raw[-1])
+            for signer, signature in item["signatures"].items()
+            if len(raw := bytes.fromhex(signature)) == 65
+        }
+        if any(
+            recover_signer(message.signable_message, sig) != signer
+            for signer, sig in signatures.items()
+        ):
+            raise RuntimeError("Corrupted signature(s)")
+
+        return cls(message=message, signatures=signatures)
+
     def save(self, path: Path):
         (path / "message.json").write_text(self.message.model_dump_json())
         (sigs_folder := path / "signatures").mkdir(exist_ok=True)

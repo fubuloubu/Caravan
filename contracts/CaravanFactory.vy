@@ -1,4 +1,4 @@
-# @version 0.4.3
+# pragma version >=0.4.3
 """
 @title Caravan Factory
 @license Apache-2.0

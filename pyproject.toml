@@ -19,6 +19,8 @@ test = [
     "ape-foundry>=0.8.10",
     "ape-solidity>=0.8.5",
     "ape-vyper>=0.8.9",
+    # TODO: remove pin when 0.5.0 is released (also upgrade contract pragma)
+    "vyper==0.5.0a3",
 ]
 dev = [
     "ape-etherscan>=0.8.5",

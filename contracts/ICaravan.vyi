@@ -1,4 +1,3 @@
-# pragma version 0.4.3
 struct Call:
     target: address
     value: uint256

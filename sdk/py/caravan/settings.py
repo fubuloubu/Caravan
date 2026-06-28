@@ -7,12 +7,12 @@ if TYPE_CHECKING:
 
 # NOTE: This is the deterministic deployment address via CreateX
 FACTORY_DETERMINISTIC_ADDRESS: "AddressType" = (
-    "0x04579FFC45fE10A7901B88EaEc8F4850b847D37c"
+    "0xdb987cC31270E974057DBD259e392Af8485355b5"
 )
 
 # NOTE: This is the deterministic deployment addresses for each version via CreateX
 SINGLETON_DETERMINISTIC_ADDRESSES: dict[str, "AddressType"] = {
-    "1": "0xcA746f8343a6197eD3BCB3DF402366fC338A6396",
+    "1": "0x265A7B39E6D6b68d0018eeFBca364085b1EF92aE",
 }
 
 USER_CACHE_DIR: Path = (

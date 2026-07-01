@@ -32,6 +32,8 @@ def new(
     threshold: uint256,
     tag: String[64] = "",
 ) -> address:
+    assert msg.sender in signers, "!authorized"
+
     # NOTE: This does *not* depend on the release chosen by the user
     salt: bytes32 = keccak256(
         concat(

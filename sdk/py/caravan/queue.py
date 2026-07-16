@@ -18,7 +18,7 @@ from .settings import USER_CACHE_DIR
 
 
 def signature_serialize(s: MessageSignature) -> str:
-    return s.as_rsv().hex()
+    return s.encode_rsv().hex()
 
 
 def hash_domain(domain_type: dict) -> HexBytes:
@@ -54,6 +54,29 @@ class QueueItem(BaseModel):
             for signer, sig in signatures.items()
         ):
             raise RuntimeError(f"Corrupted signature(s) at {path}")
+
+        return cls(message=message, signatures=signatures)
+
+    @classmethod
+    def decode(cls, encoded_item: str, eip712_domain: EIP712Domain) -> Self:
+        item = json.loads(encoded_item)
+        if "action" in item["message"]:
+            message = Modify(**item["message"], eip712_domain=eip712_domain)
+        elif "calls" in item["message"]:
+            message = Execute(**item["message"], eip712_domain=eip712_domain)
+        else:
+            raise ValueError
+
+        signatures = {
+            AddressType(signer): MessageSignature(r=raw[:32], s=raw[32:64], v=raw[-1])
+            for signer, signature in item["signatures"].items()
+            if len(raw := bytes.fromhex(signature)) == 65
+        }
+        if any(
+            recover_signer(message.signable_message, sig) != signer
+            for signer, sig in signatures.items()
+        ):
+            raise RuntimeError("Corrupted signature(s)")
 
         return cls(message=message, signatures=signatures)
 

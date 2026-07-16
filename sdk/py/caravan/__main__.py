@@ -1,7 +1,8 @@
 import json
 import math
-from typing import TYPE_CHECKING
 import runpy
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ape.exceptions import AccountsError, ConversionError
 import click
@@ -19,10 +20,12 @@ from packaging.version import Version
 from .cli import version_option, caravan_argument, parent_option
 from .factory import Factory
 from .packages import PackageType
+from .packages import NEXT_VERSION
 from .settings import (
     USER_CONFIG_DIR,
     FACTORY_DETERMINISTIC_ADDRESS,
     SINGLETON_DETERMINISTIC_ADDRESSES,
+    USER_CACHE_DIR,
 )
 
 if TYPE_CHECKING:
@@ -418,30 +421,74 @@ def run(cli_ctx, network, proposer, submit, stop_at, caravan):
     `caravan.cli.propose_from_simulation`.
     """
 
-    if not (
-        available_queue_scripts := {
-            HexBytes(script.stem[1:]): script.relative_to(cli_ctx.local_project.path)
-            for script in cli_ctx.local_project.scripts_folder.glob("q*.py")
-        }
-    ):
+    script_files = sorted(cli_ctx.local_project.scripts_folder.glob("q*.py"))
+    if not script_files:
         raise click.UsageError("No scripts to queue detected in 'scripts/'.")
 
-    elif (len(hashlen_sizes := set(len(s) for s in available_queue_scripts))) > 1:
-        raise click.UsageError("All hashes in script filenames must be same length")
+    script_prefixes = {
+        script.relative_to(cli_ctx.local_project.path): script.stem[1:]
+        for script in script_files
+    }
+    invalid_prefixes = [
+        str(script)
+        for script, prefix in script_prefixes.items()
+        if not prefix
+        or len(prefix) % 2
+        or not all(c in "0123456789abcdefABCDEF" for c in prefix)
+    ]
+    if invalid_prefixes:
+        raise click.UsageError(
+            "Queue script filenames must be `q<even-length-hex-prefix>.py`; "
+            f"invalid file(s): {', '.join(invalid_prefixes)}"
+        )
+
+    hashlen_sizes = {len(prefix) for prefix in script_prefixes.values()}
+    if len(hashlen_sizes) > 1:
+        files_by_length = {
+            size: [
+                str(script)
+                for script, prefix in script_prefixes.items()
+                if len(prefix) == size
+            ]
+            for size in sorted(hashlen_sizes)
+        }
+        details = "; ".join(
+            f"{size} hex chars: {', '.join(files)}"
+            for size, files in files_by_length.items()
+        )
+        raise click.UsageError(
+            "All queue script filename hashes must use the same prefix length "
+            f"before execution starts ({details})."
+        )
 
     # NOTE: Only one option, so pop it
-    hashlen = hashlen_sizes.pop()
-    assert stop_at is None or len(stop_at) == hashlen, (
-        f"Does not match hash length of {hashlen}: '{stop_at}'"
-    )
+    hashlen_chars = hashlen_sizes.pop()
+    hashlen = hashlen_chars // 2
+    available_queue_scripts = {
+        HexBytes(prefix): script for script, prefix in script_prefixes.items()
+    }
+    stop_at_prefix = HexBytes(stop_at) if stop_at else None
+    if stop_at_prefix is not None and len(stop_at_prefix) != hashlen:
+        raise click.UsageError(
+            f"`--stop-at` must be {hashlen_chars} hex characters to match "
+            f"the script filename prefix length."
+        )
 
     parent = caravan.head
     cli_ctx.logger.info(f"Current head: {parent.to_0x_hex()}")
 
-    while available_queue_scripts and parent[:hashlen] != stop_at:
+    scripts_executed = 0
+    while available_queue_scripts and parent[:hashlen] != stop_at_prefix:
         if not (script := available_queue_scripts.pop(parent[:hashlen], None)):
+            if scripts_executed:
+                cli_ctx.logger.info(
+                    f"No script file `q{parent[:hashlen].hex()}.py` in `scripts/`; "
+                    "queue script chain is complete."
+                )
+                break
+
             raise click.UsageError(
-                f"No command `q{parent[:hashlen]}.py` in `scripts/`."
+                f"No script file `q{parent[:hashlen].hex()}.py` in `scripts/`."
             )
 
         elif not (cmd := runpy.run_path(str(script), run_name=script.stem).get("cli")):
@@ -452,6 +499,7 @@ def run(cli_ctx, network, proposer, submit, stop_at, caravan):
         parent = cmd.callback.__wrapped__(
             cli_ctx, network, proposer, parent, submit, caravan
         )
+        scripts_executed += 1
 
         cli_ctx.logger.success(f"New head set: {parent.to_0x_hex()}")
 
@@ -481,6 +529,8 @@ def status(caravan: "Caravan"):
 @caravan_argument()
 @click.argument("itemhash", type=HexBytes)
 def show(caravan: "Caravan", itemhash: HexBytes):
+    """Show full message information in CARAVAN's local queue by ITEMHASH"""
+
     item = caravan.queue.find(itemhash)
     click.echo(f"Confirmations: {item.confirmations}/{caravan.threshold}")
 
@@ -494,6 +544,197 @@ def show(caravan: "Caravan", itemhash: HexBytes):
 @click.argument("new_head", type=HexBytes)
 def merge(submitter: "AccountAPI", caravan: "Caravan", new_head: HexBytes):
     caravan.merge(new_head, sender=submitter)
+
+
+@queue.command()
+@click.option(
+    "--listen",
+    "listen_addrs",
+    multiple=True,
+    default=None,
+    help="Multiaddress(es) to listen on (default: /ip4/0.0.0.0/tcp/0)",
+)
+@click.option(
+    "--peer",
+    "bootstrap_peers",
+    multiple=True,
+    help="Bootstrap peer multiaddress(es) to connect to",
+)
+@click.option(
+    "--sync-config",
+    "sync_config",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to sync policy TOML (default: ~/.config/caravan/sync.toml).",
+)
+@click.option(
+    "--allow-peer",
+    "allow_peers",
+    multiple=True,
+    help="Allow a libp2p peer ID to exchange queue state.",
+)
+@click.option(
+    "--public",
+    "public",
+    is_flag=True,
+    default=False,
+    help="Explicitly allow sync with any peer speaking the queue protocol.",
+)
+@click.option(
+    "--subnet",
+    "subnet",
+    default=None,
+    help="Configured sync subnet to use from sync.toml.",
+)
+@click.option(
+    "--chain-id",
+    "chain_ids",
+    type=int,
+    multiple=True,
+    help="Chain ID(s) to derive wallet queue domains for.",
+)
+@click.option(
+    "--version",
+    "versions",
+    multiple=True,
+    help="Caravan implementation version(s) to derive wallet queue domains for.",
+)
+@click.option(
+    "--identity",
+    "identity_file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to the libp2p node identity key.",
+)
+@click.option(
+    "--status-interval",
+    type=float,
+    default=15.0,
+    show_default=True,
+    help="Seconds between peer/queue status lines.",
+)
+@click.argument("wallets", nargs=-1)
+def sync(
+    listen_addrs: tuple[str],
+    bootstrap_peers: tuple[str],
+    sync_config: Path | None,
+    allow_peers: tuple[str],
+    public: bool,
+    subnet: str | None,
+    chain_ids: tuple[int],
+    versions: tuple[str],
+    identity_file: Path | None,
+    status_interval: float,
+    wallets: tuple[str],
+):
+    """Start P2P sync to exchange cached queue messages and signatures."""
+
+    import trio
+    from ape import convert
+    from eip712 import EIP712Domain
+
+    from .sync import (
+        DEFAULT_LISTEN_ADDR,
+        PROTOCOL_ID,
+        QueueCacheStore,
+        SyncDependencyError,
+        SyncNode,
+        load_sync_policy,
+    )
+
+    try:
+        policy = load_sync_policy(
+            sync_config,
+            subnet=subnet,
+            allow_peers=allow_peers,
+            peer_addrs=bootstrap_peers,
+            public=public,
+        )
+    except RuntimeError as err:
+        raise click.ClickException(str(err)) from err
+
+    effective_listen_addrs = (
+        list(listen_addrs) or list(policy.listen_addrs) or [DEFAULT_LISTEN_ADDR]
+    )
+    effective_bootstrap_peers = list(bootstrap_peers) + list(policy.boot_peers)
+
+    store = QueueCacheStore.from_existing_cache(USER_CACHE_DIR)
+    if wallets:
+        if not chain_ids:
+            raise click.UsageError(
+                "Include at least one --chain-id when deriving sync domains "
+                "from wallet addresses."
+            )
+
+        store = QueueCacheStore(USER_CACHE_DIR, domain_ids=set())
+        effective_versions = tuple(version.lstrip("v") for version in versions) or (
+            str(NEXT_VERSION),
+        )
+        for wallet in wallets:
+            try:
+                address = convert(wallet, AddressType)
+            except ConversionError as err:
+                raise click.BadParameter(
+                    f"Value '{wallet}' is not convertible to an address",
+                    param_hint="wallets",
+                ) from err
+
+            for version in effective_versions:
+                for chain_id in chain_ids:
+                    domain = EIP712Domain(
+                        name="Caravan Wallet",
+                        verifyingContract=address,
+                        version=version,
+                        chainId=chain_id,
+                    )
+                    item_domain_id = store.ensure_domain(domain)
+                    click.echo(
+                        f"Watching: {address} v{version} on chain "
+                        f"{chain_id} ({item_domain_id})"
+                    )
+
+    node = SyncNode(
+        store=store,
+        identity_file=identity_file,
+        policy=policy,
+    )
+
+    async def run_sync():
+        async with trio.open_nursery() as nursery:
+            try:
+                await node.start(
+                    listen_addrs=effective_listen_addrs,
+                    bootstrap_peers=effective_bootstrap_peers,
+                    nursery=nursery,
+                )
+
+                click.secho("Sync node started", fg="green")
+                click.echo(f"Mode: {policy.mode}")
+                if policy.subnet:
+                    click.echo(f"Subnet: {policy.subnet}")
+                click.echo(f"Peer ID: {node.peer_id}")
+                click.echo(f"Protocol: {PROTOCOL_ID}")
+                for addr in node.peer_multiaddrs:
+                    click.echo(f"Listening: {addr}")
+
+                click.echo("Press Ctrl+C to stop.")
+                while True:
+                    await trio.sleep(status_interval)
+                    click.echo(
+                        "Peers: "
+                        f"{node.peer_count}; queues: {store.queue_count}; "
+                        f"queue items: {store.item_count}"
+                    )
+            finally:
+                await node.stop()
+                nursery.cancel_scope.cancel()
+
+    try:
+        trio.run(run_sync)
+    except SyncDependencyError as err:
+        raise click.ClickException(str(err)) from err
+    except KeyboardInterrupt:
+        click.secho("Sync node stopped", fg="yellow")
 
 
 @cli.group()

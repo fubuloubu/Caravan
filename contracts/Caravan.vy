@@ -145,12 +145,20 @@ def signers() -> DynArray[address, 11]:
 
 
 @external
-def set_approval(msghash: bytes32, approved: bool = True):
+def approve(msghash: bytes32, approved_at: uint256 = block.timestamp):
     assert msg.sender in self._signers, "Not a signer"
-    if approved:
-        self.approved[msghash][msg.sender] = block.timestamp
-    else:
-        self.approved[msghash][msg.sender] = 0
+    assert approved_at >= block.timestamp, "Approval past"
+
+    self.approved[msghash][msg.sender] = approved_at
+    log ICaravan.Approved(hash=msghash, signer=msg.sender)
+
+
+@external
+def revoke(msghash: bytes32):
+    assert msg.sender in self._signers, "Not a signer"
+
+    self.approved[msghash][msg.sender] = 0
+    log ICaravan.Revoked(hash=msghash, signer=msg.sender)
 
 
 def _verify_signatures(msghash: bytes32, signatures: DynArray[Bytes[65], 11]):

@@ -258,6 +258,9 @@ def modify(
             old=self.IMPLEMENTATION,
             new=new,
         )
+        # NOTE: Verify that the new address is a contract
+        #       (Reduced chance of bricking wallet)
+        assert staticcall ICaravan(new).VERSION() != ""
         self.IMPLEMENTATION = new
 
     elif action == ICaravan.ActionType.ROTATE_SIGNERS:

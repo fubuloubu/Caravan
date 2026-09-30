@@ -84,13 +84,13 @@ def revoke(msghash: bytes32): ...
 def modify(
     action: ActionType,
     data: Bytes[65535],
-    signatures: DynArray[Bytes[65], 11] = [],
+    signatures: DynArray[Bytes[65], 11] = ...,
     # NOTE: Skip argument to use on-chain approvals
 ): ...
 
 @external
 def execute(
     calls: DynArray[Call, 8],
-    signatures: DynArray[Bytes[65], 11] = [],
+    signatures: DynArray[Bytes[65], 11] = ...,
     # NOTE: Skip argument to use on-chain approvals, or for module use
 ): ...

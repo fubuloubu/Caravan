@@ -12,7 +12,7 @@ FACTORY_DETERMINISTIC_ADDRESS: "AddressType" = (
 
 # NOTE: This is the deterministic deployment addresses for each version via CreateX
 SINGLETON_DETERMINISTIC_ADDRESSES: dict[str, "AddressType"] = {
-    "1": "0x265A7B39E6D6b68d0018eeFBca364085b1EF92aE",
+    "1": "0xB066AF4458d8D85D64CDAd720E34cA43F2FA2982",
 }
 
 USER_CACHE_DIR: Path = (

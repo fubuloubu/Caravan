@@ -115,10 +115,10 @@ def _hash_typed_data_v4(struct_hash: bytes32) -> bytes32:
 def initialize(signers: DynArray[address, 11], threshold: uint256):
     assert self.IMPLEMENTATION != empty(address)  # dev: only Proxy can initialize
     assert self.threshold == 0  # dev: can only initialize once
-    assert threshold > 0 and threshold <= len(signers)
 
-    self._signers = signers
-    self.threshold = threshold
+    # NOTE: Don't assign directly, ensure invariants are kept
+    assert threshold > 0 and threshold <= len(signers)
+    self._rotate_signers(signers, [], threshold)
 
     # NOTE: Initialize head to non-zero, network-specific value as if this action was performed
     self.head = self._hash_typed_data_v4(
@@ -145,12 +145,20 @@ def signers() -> DynArray[address, 11]:
 
 
 @external
-def set_approval(msghash: bytes32, approved: bool = True):
+def approve(msghash: bytes32, approved_at: uint256 = block.timestamp):
     assert msg.sender in self._signers, "Not a signer"
-    if approved:
-        self.approved[msghash][msg.sender] = block.timestamp
-    else:
-        self.approved[msghash][msg.sender] = 0
+    assert approved_at >= block.timestamp, "Approval past"
+
+    self.approved[msghash][msg.sender] = approved_at
+    log ICaravan.Approved(hash=msghash, signer=msg.sender)
+
+
+@external
+def revoke(msghash: bytes32):
+    assert msg.sender in self._signers, "Not a signer"
+
+    self.approved[msghash][msg.sender] = 0
+    log ICaravan.Revoked(hash=msghash, signer=msg.sender)
 
 
 def _verify_signatures(msghash: bytes32, signatures: DynArray[Bytes[65], 11]):
@@ -189,6 +197,9 @@ def _rotate_signers(
     signers_to_rm: DynArray[address, 11],
     threshold: uint256,
 ):
+    # Post-op Invariant: `0 < self.threshold <= len(self.signers)`
+    # Post-op Invariant: `self.signers` is unique
+
     current_signers: DynArray[address, 11] = self._signers
     new_signers: DynArray[address, 11] = []
 
@@ -200,12 +211,16 @@ def _rotate_signers(
     # NOTE: Ignores if `signer` in `signers_to_rm` not in `current_signers`
 
     for signer: address in signers_to_add:
+        assert signer != empty(address), "Signer cannot be null address"
         assert signer not in new_signers, "Signer cannot be added twice"
         new_signers.append(signer)
 
     if threshold > 0:
         assert threshold <= len(new_signers), "Invalid threshold"
         self.threshold = threshold
+    else:  # No change to threshold requested
+        # NOTE: Validate threshold before accepting
+        assert self.threshold <= len(new_signers), "Invalid threshold"
 
     self._signers = new_signers
 
@@ -243,6 +258,9 @@ def modify(
             old=self.IMPLEMENTATION,
             new=new,
         )
+        # NOTE: Verify that the new address is a contract
+        #       (Reduced chance of bricking wallet)
+        assert staticcall ICaravan(new).VERSION() != ""
         self.IMPLEMENTATION = new
 
     elif action == ICaravan.ActionType.ROTATE_SIGNERS:

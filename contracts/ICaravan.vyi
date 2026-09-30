@@ -54,6 +54,14 @@ event Executed:
     value: uint256
     data: Bytes[16388]
 
+event Approved:
+    hash: indexed(bytes32)
+    signer: indexed(address)
+
+event Revoked:
+    hash: indexed(bytes32)
+    signer: indexed(address)
+
 @view
 @external
 def IMPLEMENTATION() -> address: ...
@@ -67,19 +75,22 @@ def VERSION() -> String[12]: ...
 def signers() -> DynArray[address, 11]: ...
 
 @external
-def set_approval(msghash: bytes32, approved: bool = True): ...
+def approve(msghash: bytes32, approved_at: uint256): ...
+
+@external
+def revoke(msghash: bytes32): ...
 
 @external
 def modify(
     action: ActionType,
     data: Bytes[65535],
-    signatures: DynArray[Bytes[65], 11] = [],
+    signatures: DynArray[Bytes[65], 11] = ...,
     # NOTE: Skip argument to use on-chain approvals
 ): ...
 
 @external
 def execute(
     calls: DynArray[Call, 8],
-    signatures: DynArray[Bytes[65], 11] = [],
+    signatures: DynArray[Bytes[65], 11] = ...,
     # NOTE: Skip argument to use on-chain approvals, or for module use
 ): ...
